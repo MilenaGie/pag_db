@@ -1,17 +1,18 @@
-import matplotlib.pyplot as plt
-from pymongo import MongoClient
-import geopandas as gpd
 import json
-import pprint
-from pymongo.database import Collection, Database
-from base_analysis import read_shp, read_file_json, read_file_csv
-from pandas import DataFrame
+
+import geopandas as gpd
 from geopandas import GeoDataFrame
+from pandas import DataFrame
+from pymongo import MongoClient
+from pymongo.database import Collection, Database
+
 
 def point_df_to_gdf_with_geometry(df_points: DataFrame, df_geometry: GeoDataFrame) -> GeoDataFrame:
     records_with_geometry_df = df_points.merge(df_geometry, left_on='codeSH', right_on='ifcid', how='left')
-    records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df, geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
+    records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df,
+                                                 geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
     return records_with_geometry_gdf
+
 
 def record_gdf_to_insert_list(records_gdf: GeoDataFrame) -> list[dict]:
     records_json = records_gdf.to_json(to_wgs84=True)
@@ -31,6 +32,7 @@ def record_gdf_to_insert_list(records_gdf: GeoDataFrame) -> list[dict]:
 
     return insert_list
 
+
 def area_gdf_to_insert_list(area_gdf: GeoDataFrame) -> list[dict]:
     area_json = area_gdf.to_json(to_wgs84=True)
     area_list = json.loads(area_json)['features']
@@ -45,10 +47,12 @@ def area_gdf_to_insert_list(area_gdf: GeoDataFrame) -> list[dict]:
 
     return insert_list
 
+
 def insert_area_data(collection: Collection, gdf_area: GeoDataFrame):
     insert_list = area_gdf_to_insert_list(gdf_area)
     collection.insert_many(insert_list)
     collection.create_index(["geometry", "2dsphere"])
+
 
 def insert_IMGW_data(collection: Collection, df_records: DataFrame, gdf_locations: GeoDataFrame):
     gdf_merged = point_df_to_gdf_with_geometry(df_records, gdf_locations)
@@ -56,11 +60,12 @@ def insert_IMGW_data(collection: Collection, df_records: DataFrame, gdf_location
     collection.insert_many(insert_list)
     collection.create_index(["geometry", "2dsphere"])
 
+
 def calculate_mean(collectionArea: Collection, collectionData: Collection):
     print(f"Calculating mean for all area files:")
     all_areas = collectionArea.count_documents({})
 
-    for i,area in enumerate(collectionArea.find({})):
+    for i, area in enumerate(collectionArea.find({})):
         try:
             cursor = collectionData.aggregate([
                 {
@@ -79,9 +84,11 @@ def calculate_mean(collectionArea: Collection, collectionData: Collection):
 
     print("Completed")
 
-def visualize_areas_with_calculated_value(collectionArea: Collection, collectionData: Collection, value_name: str):
-    collectionData.find().plot()
-    plt.show()
+
+def show_value(chosen_collection: Collection, name: str):
+    for x in chosen_collection.find({'name': name}):
+        print(x['name'], "=", x['mean'])
+
 
 def main():
     # Importing data from files to dataframes and geodataframes
@@ -106,5 +113,7 @@ def main():
     # calculate_mean(dataWoj, dataIMGW)
     # calculate_mean(dataPow, dataIMGW)
 
-    client.close()
+    # Input and results
+    show_value(dataWoj, 'mazowieckie')
 
+    client.close()

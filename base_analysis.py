@@ -19,7 +19,7 @@ def read_file_csv(path):
     df[["date", "fullHour"]] = df.fullDate.str.split(" ", expand=True)  # split fullDate into columns date and hour
     df[["year", "month", "day"]] = df.date.str.split("-", expand=True)
     df[["hour", "min"]] = df.fullHour.str.split(":", expand=True)
-    df['value'] = df['value'].str.replace(",",'.')
+    df['value'] = df['value'].str.replace(",", '.')
     df = df.drop(columns=["empty", "paramSH", "fullDate", "date", "fullHour"])
     df = df.sort_values(["year", "month", "day", "hour", "min"])
     return df
@@ -53,11 +53,17 @@ def group_by_day(df):
 # statystyki na kazdy dzien z uwzglednieniem pory dania
 def get_statistic(df, trimmed_perc=5):
     df_by_time = group_by_day(df)
-    mean = df_by_time["value"].mean()                                   # srednia
-    median = df_by_time["value"].median()                               # mediana
+    mean = df_by_time["value"].mean()  # srednia
+    median = df_by_time["value"].median()  # mediana
     trim_mean = 0  # stats.trim_mean(df_by_time.value, trimmed_perc / 100)   # srednia obcinana
     return mean, median, trim_mean
 
+
+def point_df_to_gdf_with_geometry(df_points: DataFrame, df_geometry: GeoDataFrame) -> GeoDataFrame:
+    records_with_geometry_df = df_points.merge(df_geometry, left_on='codeSH', right_on='ifcid', how='left')
+    records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df,
+                                                 geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
+    return records_with_geometry_gdf
 
 
 def main():
@@ -65,7 +71,7 @@ def main():
     df_stations = read_file_json("data/effacility.geojson")
     df_woj = read_shp("data/woj.shp")
     df_pow = read_shp("data/powiaty.shp")
-    #print(df_pow)
+    # print(df_pow)
     # get_statistic(df)
     # print(df.groupby("codeSH").apply(lambda x: x))
     # print(df_stations)

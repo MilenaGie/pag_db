@@ -1,17 +1,11 @@
 import json
 
-import geopandas as gpd
 from geopandas import GeoDataFrame
 from pandas import DataFrame
 from pymongo import MongoClient
 from pymongo.database import Collection, Database
 
-
-def point_df_to_gdf_with_geometry(df_points: DataFrame, df_geometry: GeoDataFrame) -> GeoDataFrame:
-    records_with_geometry_df = df_points.merge(df_geometry, left_on='codeSH', right_on='ifcid', how='left')
-    records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df,
-                                                 geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
-    return records_with_geometry_gdf
+from base_analysis import read_shp, read_file_json, read_file_csv, point_df_to_gdf_with_geometry
 
 
 def record_gdf_to_insert_list(records_gdf: GeoDataFrame) -> list[dict]:
@@ -92,10 +86,12 @@ def show_value(chosen_collection: Collection, name: str):
 
 def main():
     # Importing data from files to dataframes and geodataframes
-    # df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
-    # gdf_stations = read_file_json("data/effacility.geojson")
-    # gdf_woj = read_shp("data/woj.shp")
-    # gdf_pow = read_shp("data/powiaty.shp")
+    '''
+    df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
+    gdf_stations = read_file_json("data/effacility.geojson")
+    gdf_woj = read_shp("data/woj.shp")
+    gdf_pow = read_shp("data/powiaty.shp")
+    '''
 
     # Connecting to MongoClient and setting up the database
     client: MongoClient = MongoClient("localhost", 27017)
@@ -105,13 +101,17 @@ def main():
     dataPow: Collection = db.dataPow
 
     # Insering data into appropriate tables
-    # insert_IMGW_data(dataIMGW, df_IMGW, gdf_stations)
-    # insert_area_data(dataWoj, gdf_woj)
-    # insert_area_data(dataPow, gdf_pow)
+    '''
+    insert_IMGW_data(dataIMGW, df_IMGW, gdf_stations)
+    insert_area_data(dataWoj, gdf_woj)
+    insert_area_data(dataPow, gdf_pow)
+    '''
 
     # Calculating mean values and adding them to every file in selected collection
-    # calculate_mean(dataWoj, dataIMGW)
-    # calculate_mean(dataPow, dataIMGW)
+    '''
+    calculate_mean(dataWoj, dataIMGW)
+    calculate_mean(dataPow, dataIMGW)
+    '''
 
     # Input and results
     show_value(dataWoj, 'mazowieckie')

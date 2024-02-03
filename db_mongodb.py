@@ -56,6 +56,33 @@ def insert_IMGW_data(collection: Collection, df_records: DataFrame, gdf_location
     collection.insert_many(insert_list)
     collection.create_index(["geometry", "2dsphere"])
 
+def calculate_mean(collectionArea: Collection, collectionData: Collection):
+    print(f"Calculating mean for all area files:")
+    all_areas = collectionArea.count_documents({})
+
+    for i,area in enumerate(collectionArea.find({})):
+        try:
+            cursor = collectionData.aggregate([
+                {
+                    "$match": {"geometry": {"$geoWithin": {"$geometry": area['geometry']}}}
+                },
+                {
+                    "$group": {"_id": area["name"], "mean": {"$avg": "$value"}}
+                }
+            ])
+            for x in cursor:
+                collectionArea.update_one({"name": x["_id"]}, {"$set": {"mean": x["mean"]}})
+            print(area['name'], f"({i + 1}/{all_areas})\t\t\t - calculation completed")
+        except:
+            collectionArea.update_one({"name": area["name"]}, {"$set": {"mean": 0}})
+            print(area['name'], f"({i + 1}/{all_areas})\t\t\t - calculation error: wrong data")
+
+    print("Completed")
+
+def visualize_areas_with_calculated_value(collectionArea: Collection, collectionData: Collection, value_name: str):
+    collectionData.find().plot()
+    plt.show()
+
 def main():
     # Importing data from files to dataframes and geodataframes
     # df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
@@ -75,9 +102,9 @@ def main():
     # insert_area_data(dataWoj, gdf_woj)
     # insert_area_data(dataPow, gdf_pow)
 
-    # check = atemp.find({})
-    # for record in check:
-    #     pprint.pprint(record)
+    # Calculating mean values and adding them to every file in selected collection
+    # calculate_mean(dataWoj, dataIMGW)
+    # calculate_mean(dataPow, dataIMGW)
 
     client.close()
 

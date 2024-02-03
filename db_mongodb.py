@@ -8,11 +8,16 @@ from base_analysis import read_shp, read_file_json, read_file_csv
 from pandas import DataFrame
 from geopandas import GeoDataFrame
 
-def record_gdf_to_input_list(records_gdf: GeoDataFrame) -> list[dict]:
+def point_df_to_gdf_with_geometry(df_points: DataFrame, df_geometry: GeoDataFrame) -> GeoDataFrame:
+    records_with_geometry_df = df_points.merge(df_geometry, left_on='codeSH', right_on='ifcid', how='left')
+    records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df, geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
+    return records_with_geometry_gdf
+
+def record_gdf_to_insert_list(records_gdf: GeoDataFrame) -> list[dict]:
     records_json = records_gdf.to_json(to_wgs84=True)
     records_list = json.loads(records_json)['features']
 
-    input_list = []
+    insert_list = []
     for record in records_list:
         if record['geometry'] is not None:
             temp = dict()
@@ -22,35 +27,57 @@ def record_gdf_to_input_list(records_gdf: GeoDataFrame) -> list[dict]:
             temp['day'] = int(record['properties']['day'])
             temp['hour'] = int(record['properties']['hour'])
             temp['geometry'] = record['geometry']
-            input_list.append(temp)
+            insert_list.append(temp)
 
-    return input_list
+    return insert_list
 
-def point_df_to_gdf_with_geometry(df_points: DataFrame, df_geometry: GeoDataFrame) -> GeoDataFrame:
-    records_with_geometry_df = df_points.merge(df_geometry, left_on='codeSH', right_on='ifcid', how='left')
-    records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df, geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
-    return records_with_geometry_gdf
+def area_gdf_to_insert_list(area_gdf: GeoDataFrame) -> list[dict]:
+    area_json = area_gdf.to_json(to_wgs84=True)
+    area_list = json.loads(area_json)['features']
+
+    insert_list = []
+    for record in area_list:
+        temp = dict()
+        temp['id'] = int(record['properties']['id'])
+        temp['name'] = str(record['properties']['name'])
+        temp['geometry'] = record['geometry']
+        insert_list.append(temp)
+
+    return insert_list
+
+def insert_area_data(collection: Collection, gdf_area: GeoDataFrame):
+    insert_list = area_gdf_to_insert_list(gdf_area)
+    collection.insert_many(insert_list)
+    collection.create_index(["geometry", "2dsphere"])
+
+def insert_IMGW_data(collection: Collection, df_records: DataFrame, gdf_locations: GeoDataFrame):
+    gdf_merged = point_df_to_gdf_with_geometry(df_records, gdf_locations)
+    insert_list = record_gdf_to_insert_list(gdf_merged)
+    collection.insert_many(insert_list)
+    collection.create_index(["geometry", "2dsphere"])
 
 def main():
-    # df = read_file_csv("data/B00305A_2023_09.csv")
-    # df_stations = read_file_json("data/effacility.geojson")
+    # Importing data from files to dataframes and geodataframes
+    # df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
+    # gdf_stations = read_file_json("data/effacility.geojson")
+    # gdf_woj = read_shp("data/woj.shp")
+    # gdf_pow = read_shp("data/powiaty.shp")
 
-    # df_woj = read_shp("data/woj.shp")
-    # df_pow = read_shp("data/powiaty.shp")
-
+    # Connecting to MongoClient and setting up the database
     client: MongoClient = MongoClient("localhost", 27017)
-    db: Database = client.temperature
-    atemp: Collection = db.atemp
-    # atemp.insert_many(record_gdf_to_input_list(point_df_to_gdf_with_geometry(df, df_stations))
+    db: Database = client.db
+    dataIMGW: Collection = db.dataIMGW
+    dataWoj: Collection = db.dataWoj
+    dataPow: Collection = db.dataPow
 
-    check = atemp.find({})
-    for record in check:
-        pprint.pprint(record)
+    # Insering data into appropriate tables
+    # insert_IMGW_data(dataIMGW, df_IMGW, gdf_stations)
+    # insert_area_data(dataWoj, gdf_woj)
+    # insert_area_data(dataPow, gdf_pow)
 
-    # print(Atemp.find_one())
-    # ({})
-    # for document in x:
-    #     pprint.pprint(document)
+    # check = atemp.find({})
+    # for record in check:
+    #     pprint.pprint(record)
 
     client.close()
 

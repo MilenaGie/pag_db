@@ -4,6 +4,7 @@ from pandas import DataFrame
 
 from base_analysis import read_shp, read_file_json, read_file_csv
 
+
 def create_query_for_woj_row(ind: int, woj_id: int, woj_name: str):
     row_query = '(w' + str(ind) + ':voivodeship {' + f'id: {woj_id}, name: "{woj_name}"' + '})'
     return row_query
@@ -20,34 +21,44 @@ def create_query_for_station_row(ind_p: int, ind_s: int, station_id: int, statio
     row_query += f'(s{str(ind_s)}) - [: WITHIN] -> (p{str(ind_p)})'
     return row_query
 
-def create_query_for_IMGW_row(name: str, r_codeSH: str, r_value: str, r_year: str, r_month: str, r_day: str, r_hour: str):
-    row_query = '(:record {' + f'{name}: {r_value}, year: {r_year}, month: {r_month},day: {r_day}, hour: {r_hour}' + '})'
-    row_query += '- [:FROM] -> (:station {id: ' + r_codeSH + '})'
+
+def create_query_for_IMGW_row(name: str, r_codeSH: str, r_value: str, r_year: str, r_month: str, r_day: str,
+                              r_hour: str):
+    row_query = 'MATCH (r_station:station {id: ' + r_codeSH + '})'
+    row_query += 'CREATE (:record {' + f'{name}: {r_value}, year: {r_year}, month: {r_month},day: {r_day}, hour: {r_hour}' + '})'
+    row_query += '- [:FROM] -> (r_station);'
     return row_query
+
 
 def insert_IMGW_data(session, df_records: DataFrame, name: str):
     print("Begining the insertion of IMGW data")
-    for i,ind in enumerate(df_records.index):
-        query = 'CREATE '
-        addition = create_query_for_IMGW_row(name, str(df_records['codeSH'][ind]), str(float(df_records['value'][ind])), str(int(df_records['year'][ind])), str(int(df_records['month'][ind])), str(int(df_records['day'][ind])), str(int(df_records['hour'][ind])))
+    for i, ind in enumerate(df_records.index):
+        query = create_query_for_IMGW_row(name, str(df_records['codeSH'][ind]), str(float(df_records['value'][ind])),
+                                          str(int(df_records['year'][ind])), str(int(df_records['month'][ind])),
+                                          str(int(df_records['day'][ind])), str(int(df_records['hour'][ind])))
         print("Calculating addition for record: " + str(i) + "/" + str(len(df_records)))
-        query += addition + ';'
         session.run(query)
         if i == 10000:
             break
     print("Insertion complete")
 
 
-def calculate_avg(session, pow_or_voiv):
-    query = "MATCH (record:record)-[:FROM]->(station:station)-[:WITHIN]->(county:county) WITH county, AVG(record.temperature) AS avgTemperature SET county.avgtemp = avgTemperature RETURN county.name, county.avgtemp AS avgTemperature"
+def calculate_avg(session, v_not_c: bool):
+    # Selecting all records connected to every county
+    query = "MATCH (r:record)-[:FROM]->(s:station)-[:WITHIN]->"
+    if v_not_c:
+        query += "(c:county)-[:WITHIN]->(target:voivodeship)"
+    else:
+        query += "(target:county)"
+    query += " WITH target, avg(r.temperature) as avg"
+    query += " SET target.avgtemp = avg"
     session.run(query)
-
 
 def insert_area_data(session, gdf_woj: GeoDataFrame, gdf_pow: GeoDataFrame, gdf_stations: GeoDataFrame):
     for ind_w in gdf_woj.index:
-        #Setting up the query
+        # Setting up the query
         query = 'CREATE '
-        #Adding to the query to create a node for every voivodeship
+        # Adding to the query to create a node for every voivodeship
         query += create_query_for_woj_row(ind_w, gdf_woj['id'][ind_w], gdf_woj['name'][ind_w])
 
         # Finding all counties within said voivodeship
@@ -62,17 +73,17 @@ def insert_area_data(session, gdf_woj: GeoDataFrame, gdf_pow: GeoDataFrame, gdf_
                 # Adding to the query to create a node for every station and connect it to the said county
                 query += create_query_for_station_row(ind_p, ind_s, gdf_stations_within_pow['ifcid'][ind_s],
                                                       gdf_stations_within_pow['name'][ind_s])
-        #Finalizing the query and executing it
+        # Finalizing the query and executing it
         query += ';'
         session.run(query)
 
 
 def main():
     # Importing data from files to dataframes and geodataframes
-    df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
-    #gdf_stations = read_file_json("data/effacility.geojson")
-    #gdf_woj = read_shp("data/woj.shp")
-    #gdf_pow = read_shp("data/powiaty.shp")
+    # df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
+    # gdf_stations = read_file_json("data/effacility.geojson")
+    # gdf_woj = read_shp("data/woj.shp")
+    # gdf_pow = read_shp("data/powiaty.shp")
 
     # Connecting to the database
     user, password = "neo4j", "neo4j_password"
@@ -81,11 +92,11 @@ def main():
 
     # Inserting data into the database
     # insert_area_data(session, gdf_woj, gdf_pow, gdf_stations)
-    insert_IMGW_data(session, df_IMGW, "temperature")
+    # insert_IMGW_data(session, df_IMGW, "temperature")
 
-    #Calculating avg values for all counties and voivodeships
-
-
+    # Calculating avg values for all counties and voivodeships
+    calculate_avg(session, 0)
+    calculate_avg(session, 1)
 
     # Printing chosen data
 

@@ -55,8 +55,8 @@ def insert_IMGW_data(collection: Collection, df_records: DataFrame, gdf_location
     collection.create_index(["geometry", "2dsphere"])
 
 
-def calculate_mean(collectionArea: Collection, collectionData: Collection):
-    print(f"Calculating mean for all area files:")
+def calculate_avg(collectionArea: Collection, collectionData: Collection):
+    print(f"Calculating avg for all area files:")
     all_areas = collectionArea.count_documents({})
 
     for i, area in enumerate(collectionArea.find({})):
@@ -66,7 +66,7 @@ def calculate_mean(collectionArea: Collection, collectionData: Collection):
                     "$match": {"geometry": {"$geoWithin": {"$geometry": area['geometry']}}}
                 },
                 {
-                    "$group": {"_id": area["name"], "mean": {"$avg": "$value"}}
+                    "$group": {"_id": area["name"], "avg": {"$avg": "$value"}}
                 }
             ])
             for x in cursor:
@@ -81,7 +81,7 @@ def calculate_mean(collectionArea: Collection, collectionData: Collection):
 
 def show_value(chosen_collection: Collection, name: str):
     for x in chosen_collection.find({'name': name}):
-        print(x['name'], "=", x['mean'])
+        print(x['name'], "=", x['avg'])
 
 
 def main():
@@ -109,8 +109,8 @@ def main():
 
     # Calculating mean values and adding them to every file in selected collection
     '''
-    calculate_mean(dataWoj, dataIMGW)
-    calculate_mean(dataPow, dataIMGW)
+    calculate_avg(dataWoj, dataIMGW)
+    calculate_avg(dataPow, dataIMGW)
     '''
 
     # Input and results

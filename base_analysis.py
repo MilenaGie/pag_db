@@ -59,8 +59,8 @@ def get_statistic(df, trimmed_perc=5):
     return mean, median, trim_mean
 
 
-def point_df_to_gdf_with_geometry(df_points: DataFrame, df_geometry: GeoDataFrame) -> GeoDataFrame:
-    records_with_geometry_df = df_points.merge(df_geometry, left_on='codeSH', right_on='ifcid', how='left')
+def point_df_to_gdf_with_geometry(df_points: DataFrame, gdf_geometry: GeoDataFrame) -> GeoDataFrame:
+    records_with_geometry_df = df_points.merge(gdf_geometry, left_on='codeSH', right_on='ifcid', how='left')
     records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df,
                                                  geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
     return records_with_geometry_gdf

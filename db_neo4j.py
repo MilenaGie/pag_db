@@ -44,15 +44,26 @@ def insert_IMGW_data(session, df_records: DataFrame, name: str):
 
 
 def calculate_avg(session, v_not_c: bool):
-    # Selecting all records connected to every county
     query = "MATCH (r:record)-[:FROM]->(s:station)-[:WITHIN]->"
     if v_not_c:
         query += "(c:county)-[:WITHIN]->(target:voivodeship)"
     else:
         query += "(target:county)"
-    query += " WITH target, avg(r.temperature) as avg"
+    query += 'WITH target, avg(r.temperature) as avg'
     query += " SET target.avgtemp = avg"
     session.run(query)
+
+
+def show_value(session, name: str, v_not_c: bool):
+    if v_not_c:
+        query = 'MATCH (target:voivodeship {name: "' + name + '"}) '
+    else:
+        query = 'MATCH (target:county {name: "' + name + '"}) '
+    query += 'RETURN target.name as Name, target.avgtemp as AverageTemperature'
+    result = session.run(query)
+    for r in result:
+        print(r)
+
 
 def insert_area_data(session, gdf_woj: GeoDataFrame, gdf_pow: GeoDataFrame, gdf_stations: GeoDataFrame):
     for ind_w in gdf_woj.index:
@@ -80,10 +91,10 @@ def insert_area_data(session, gdf_woj: GeoDataFrame, gdf_pow: GeoDataFrame, gdf_
 
 def main():
     # Importing data from files to dataframes and geodataframes
-    # df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
-    # gdf_stations = read_file_json("data/effacility.geojson")
-    # gdf_woj = read_shp("data/woj.shp")
-    # gdf_pow = read_shp("data/powiaty.shp")
+    df_IMGW = read_file_csv("data/B00305A_2023_09.csv")
+    gdf_stations = read_file_json("data/effacility.geojson")
+    gdf_woj = read_shp("data/woj.shp")
+    gdf_pow = read_shp("data/powiaty.shp")
 
     # Connecting to the database
     user, password = "neo4j", "neo4j_password"
@@ -91,13 +102,14 @@ def main():
     session = driver.session()
 
     # Inserting data into the database
-    # insert_area_data(session, gdf_woj, gdf_pow, gdf_stations)
-    # insert_IMGW_data(session, df_IMGW, "temperature")
+    insert_area_data(session, gdf_woj, gdf_pow, gdf_stations)
+    insert_IMGW_data(session, df_IMGW, "temperature")
 
     # Calculating avg values for all counties and voivodeships
     calculate_avg(session, 0)
     calculate_avg(session, 1)
 
     # Printing chosen data
-
+    show_value(session, 'mazowieckie', 1)
+    show_value(session, 'kartuski', 0)
     session.close()

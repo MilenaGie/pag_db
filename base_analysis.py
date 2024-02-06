@@ -1,17 +1,14 @@
 import pandas as pd
-from pandas import DataFrame
 import geopandas as gpd
-from geopandas import GeoDataFrame
-import json
 import numpy as np
-import matplotlib.pyplot as plt
-
+from scipy import stats
 
 # B00020S   - Stan wody operacyjny
 # B00050S   - Przepływ operacyjny
 # B00014A   - Stan wody kontrolny
 # B00101A   - Temperatura wody  (obserwator)
 # B00305A   - Temperatura gruntu (czujnik)
+
 
 def read_file_csv(path):
     column_names = ["codeSH", "paramSH", "fullDate", "value", "empty"]
@@ -20,6 +17,7 @@ def read_file_csv(path):
     df[["year", "month", "day"]] = df.date.str.split("-", expand=True)
     df[["hour", "min"]] = df.fullHour.str.split(":", expand=True)
     df['value'] = df['value'].str.replace(",", '.')
+    df["value"] = pd.to_numeric(df["value"])
     df = df.drop(columns=["empty", "paramSH", "fullDate", "date", "fullHour"])
     df = df.sort_values(["year", "month", "day", "hour", "min"])
     return df
@@ -42,8 +40,6 @@ def group_by_day(df):
     h1 = hours >= np.full_like(hours, 5)
     h2 = hours < np.full_like(hours, 22)
     h = h1 == h2
-    # ^!! dla wartosci false i false bedzie true;
-    #  jesli przedzial zostal dobrze zdefiniowany, to taki przypadek nie nastapi
     day_night = np.where(h, "day", "night")
     df["day_night"] = day_night
     df_by_time = df.groupby(["year", "month", "day", "day_night"])
@@ -53,28 +49,66 @@ def group_by_day(df):
 # statystyki na kazdy dzien z uwzglednieniem pory dania
 def get_statistic(df, trimmed_perc=5):
     df_by_time = group_by_day(df)
-    mean = df_by_time["value"].mean()  # srednia
-    median = df_by_time["value"].median()  # mediana
-    trim_mean = 0  # stats.trim_mean(df_by_time.value, trimmed_perc / 100)   # srednia obcinana
-    return mean, median, trim_mean
+    group_name, mean, median, trim_mean = [], [], [], []
+    for record in list(df_by_time["value"]):
+        group_name.append("-".join(record[0]))
+        mean.append(record[1].mean())
+        median.append(record[1].median())
+        trim_mean.append(stats.trim_mean(record[1], trimmed_perc / 100))
+    result = pd.DataFrame({"Name": group_name, "Mean": mean, "Median": median, "Trimmed_mean": trim_mean})
+    print(result)
 
 
-def point_df_to_gdf_with_geometry(df_points: DataFrame, gdf_geometry: GeoDataFrame) -> GeoDataFrame:
+def point_df_to_gdf_with_geometry(df_points: pd.DataFrame, gdf_geometry: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     records_with_geometry_df = df_points.merge(gdf_geometry, left_on='codeSH', right_on='ifcid', how='left')
     records_with_geometry_gdf = gpd.GeoDataFrame(records_with_geometry_df,
                                                  geometry=records_with_geometry_df['geometry']).to_crs(epsg=2180)
     return records_with_geometry_gdf
 
 
+def join_geometry_with_data(data, geo_data):
+    data["codeSH"] = pd.to_numeric(data["codeSH"])
+    geo_data["name_left"] = pd.to_numeric(geo_data["name_left"])
+    merged = pd.merge(data, geo_data, how="left", left_on="codeSH", right_on="name_left")
+    result = merged[["codeSH", "value", "year", "month", "day", "name_right"]]
+    return result
+
+
+def join_data_with_geometries(data, df_woj, df_pow, df_stations):
+    stations_woj = df_stations.sjoin(df_woj, how="left")
+    stations_pow = df_stations.sjoin(df_pow, how="left")
+    # join geometry with data
+    data_woj = join_geometry_with_data(data, stations_woj)
+    data_pow = join_geometry_with_data(data, stations_pow)
+    return data_woj, data_pow
+
+
+def get_statistics_by_geometry(df_data, trimmed_perc=5, select=[]):
+    for rec in list(df_data.groupby("name_right")):
+        if select == [] or rec[0] in select:
+            print(rec[0])
+            data = rec[1].groupby(["year", "month", "day"])
+            group_name, mean, median, trim_mean = [], [], [], []
+            for record in list(data["value"]):
+                group_name.append("-".join(record[0]))
+                mean.append(record[1].mean())
+                median.append(record[1].median())
+                trim_mean.append(stats.trim_mean(record[1], trimmed_perc / 100))
+            result = pd.DataFrame({"Name": group_name, "Mean": mean, "Median": median, "Trimmed_mean": trim_mean})
+            print(result)
+
+
 def main():
-    df = read_file_csv("data/B00305A_2023_09.csv")
+    df_data = read_file_csv("data/B00305A_2023_09.csv")
     df_stations = read_file_json("data/effacility.geojson")
     df_woj = read_shp("data/woj.shp")
     df_pow = read_shp("data/powiaty.shp")
-    # print(df_pow)
-    # get_statistic(df)
-    # print(df.groupby("codeSH").apply(lambda x: x))
-    # print(df_stations)
+    df_woj, df_pow = df_woj.to_crs(2180), df_pow.to_crs(2180)
+    df_data_woj, df_data_pow = join_data_with_geometries(df_data, df_woj, df_pow, df_stations)
 
-    # df.plot()
-    # plt.show()
+    # statystyka z podzialem na dzien/noc
+    # get_statistic(df_data)
+
+    # statystyka z podzialem na wojewodztwa lub powiaty
+    # get_statistics_by_geometry(df_data_pow, select=["pszczyński", "poznański"])
+    # get_statistics_by_geometry(df_data_woj, select=["mazowieckie", "opolskie"])
